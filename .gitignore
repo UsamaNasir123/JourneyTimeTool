@@ -1,11 +1,8 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# C extensions
-*.so
-
+   *.csv
+   *.xlsx
+   *.zip
+   monthly_files/
+   __pycache__/
 # Distribution / packaging
 .Python
 build/
