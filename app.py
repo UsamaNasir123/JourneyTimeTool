@@ -20,6 +20,9 @@ with st.expander("Settings", expanded=False):
     fill_months = st.checkbox("Create a predicted day for months with no data", True)
     force_wd = st.checkbox("If a month has no preferred-weekday data, predict that weekday instead of using another real day", False)
     hl = st.checkbox("Highlight predicted cells in yellow", True)
+    hdr = st.selectbox("Header cells B1 / C1", ["Real date cells (default)", "Text: date + weekday", "Text: date only"],
+                       help="Use the first one unless the portal rejects the file.")
+    hdr_mode = {"Real date cells (default)": "date", "Text: date + weekday": "weekday", "Text: date only": "text"}[hdr]
     natural = st.checkbox("Add natural variation to predicted cells (otherwise they look too smooth)", True)
 
 if up:
@@ -38,7 +41,7 @@ if up:
         st.info(f"Before day {before[0]:%d-%m-%Y}: {90 - nb} real time slots, {nb} predicted. "
                 f"Every file name starts with {before[0]:%Y-%m-%d}.")
     st.dataframe(log[["month", "date", "weekday", "source", "predicted_slots"]], use_container_width=True, hide_index=True)
-    st.download_button("⬇️ Download all files (ZIP)", jt.build_zip(res, hl),
+    st.download_button("⬇️ Download all files (ZIP)", jt.build_zip(res, hl, hdr_mode),
                        file_name="journeytime_monthly_files.zip", mime="application/zip", type="primary")
     pick = st.selectbox("Preview a month", [r["month"] for r in res])
     r = next(x for x in res if x["month"] == pick)

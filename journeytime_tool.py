@@ -203,26 +203,36 @@ def process(df, weekday="Thu", min_coverage=0.2, fill_missing_months=True, force
     return results
 
 
-def workbook_bytes(res, highlight=True):
+def workbook_bytes(res, highlight=True, header_mode="date"):
+    """Plain, portal-friendly sheet: Time | Before date | After date, 90 data rows only,
+    left-aligned, no frozen panes (those show as thick lines), no extra formatting beyond the data."""
     wb = Workbook(); ws = wb.active; ws.title = "Sheet1"
     d, bf = res["day"], res.get("before")
-    head = ["Time"] + ([f"{bf[0]:%d-%m-%Y} (Before)"] if bf else []) + [f"{d:%d-%m-%Y} (After)"]
+    # header_mode: "date" = real Excel date cells (B1, C1) | "weekday" = text "25/09/2025 (Thursday)" | "text" = text "25/09/2025"
+    def lab(x):
+        if header_mode == "date":
+            return x if isinstance(x, date) else x.date()
+        return f"{x:%d/%m/%Y} ({pd.Timestamp(x).day_name()})" if header_mode == "weekday" else f"{x:%d/%m/%Y}"
+    head = ["Time"] + ([lab(bf[0])] if bf else []) + [lab(d)]
+    left = Alignment(horizontal="left")
     ws.append(head)
     for i, t in enumerate(SLOTS):
-        row = [t] + ([bf[1][i]] if bf else []) + [res["values"][i]]
-        ws.append(row)
+        ws.append([t] + ([bf[1][i]] if bf else []) + [res["values"][i]])
         ws.cell(row=i + 2, column=1).number_format = "h:mm:ss"
         if highlight:
             if bf and not bf[2][i]:
                 ws.cell(row=i + 2, column=2).fill = YELLOW
             if not res["measured"][i]:
                 ws.cell(row=i + 2, column=len(head)).fill = YELLOW
-    for c in ws[1]:
-        c.font = Font(bold=True); c.alignment = Alignment(horizontal="center", wrap_text=True)
+    for row in ws.iter_rows(min_row=1, max_row=len(SLOTS) + 1, max_col=len(head)):
+        for c in row:
+            c.alignment = left
+    if header_mode == "date":
+        for col in range(2, len(head) + 1):
+            ws.cell(row=1, column=col).number_format = "dd/mm/yyyy"
     ws.column_dimensions["A"].width = 10
     for col in range(2, len(head) + 1):
-        ws.column_dimensions[chr(64 + col)].width = 22
-    ws.freeze_panes = "B2"
+        ws.column_dimensions[chr(64 + col)].width = 14
     b = io.BytesIO(); wb.save(b); return b.getvalue()
 
 
@@ -234,11 +244,11 @@ def log_frame(results):
                          for r in results])
 
 
-def build_zip(results, highlight=True):
+def build_zip(results, highlight=True, header_mode="date"):
     b = io.BytesIO()
     with zipfile.ZipFile(b, "w", zipfile.ZIP_DEFLATED) as z:
         for r in results:
-            z.writestr(r["name"], workbook_bytes(r, highlight))
+            z.writestr(r["name"], workbook_bytes(r, highlight, header_mode))
         z.writestr("estimate_log.csv", log_frame(results).to_csv(index=False))
     return b.getvalue()
 
@@ -250,6 +260,8 @@ def main():
     ap.add_argument("--value", default="duration_in_traffic")
     ap.add_argument("--no-fill-months", action="store_true"); ap.add_argument("--no-highlight", action="store_true")
     ap.add_argument("--before", help="Before file (csv/xlsx with Time + '(Before)' column); added to every month")
+    ap.add_argument("--header", choices=["date", "weekday", "text"], default="date",
+                    help="date = real date cells (default) | weekday = text '25/09/2025 (Thursday)' | text = text '25/09/2025'")
     ap.add_argument("--no-variation", action="store_true", help="leave predicted cells as smooth values (no natural scatter)")
     ap.add_argument("--before-date", help="Before date as YYYY-MM-DD if it is not in the column name")
     ap.add_argument("--force-weekday", action="store_true",
@@ -259,7 +271,7 @@ def main():
     res = process(load(a.csv, a.value), a.weekday, a.min_coverage, not a.no_fill_months, a.force_weekday, bf, not a.no_variation)
     os.makedirs(a.out, exist_ok=True)
     for r in res:
-        open(os.path.join(a.out, r["name"]), "wb").write(workbook_bytes(r, not a.no_highlight))
+        open(os.path.join(a.out, r["name"]), "wb").write(workbook_bytes(r, not a.no_highlight, a.header))
     lg = log_frame(res); lg.to_csv(os.path.join(a.out, "estimate_log.csv"), index=False)
     print(lg.to_string(index=False))
 
